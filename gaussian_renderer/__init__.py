@@ -35,9 +35,10 @@ def render(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tensor, d_
     Render the scene.
 
     Background tensor (bg_color) must be on GPU!
-    """
+    """ 
 
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
+    # 这里多创建了一个一模一样的tensor，是为了什么呢？
     screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
     screenspace_points_densify = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
     try:

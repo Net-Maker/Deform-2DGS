@@ -68,13 +68,13 @@ class ModelParams(ParamGroup):
         return g
 
 
-class PipelineParams(ParamGroup):
+class PipelineParams(ParamGroup): 
     def __init__(self, parser):
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
+        self.depth_ratio = 0.0
         self.debug = False
         super().__init__(parser, "Pipeline Parameters")
-
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
@@ -91,12 +91,17 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
+        self.lambda_dist = 0.0 # 2dgs config
+        self.lambda_normal = 0.05
+        self.opacity_cull = 0.05
+
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
-        self.densify_grad_threshold = 0.0007
+        self.densify_grad_threshold = 0.0002 # 0.0007 in Deform-GS
         super().__init__(parser, "Optimization Parameters")
+
 
 
 def get_combined_args(parser: ArgumentParser):

@@ -13,7 +13,7 @@ import os
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim, kl_divergence
-from gaussian_renderer import render, network_gui
+from gaussian_renderer_2d import render, network_gui
 import sys
 from scene import Scene, GaussianModel, DeformModel
 from utils.general_utils import safe_state, get_linear_noise_func
@@ -111,7 +111,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
-        loss.backward()
+        # regularization
+        lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
+        lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
+
+        rend_dist = render_pkg_re["rend_dist"]
+        rend_normal  = render_pkg_re['rend_normal']
+        surf_normal = render_pkg_re['surf_normal']
+        normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
+        normal_loss = lambda_normal * (normal_error).mean()
+        dist_loss = lambda_dist * (rend_dist).mean()
+        
+        
+        # loss
+        total_loss = loss + dist_loss + normal_loss
+        
+        total_loss.backward()
 
         iter_end.record()
 
@@ -145,17 +160,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 scene.save(iteration)
                 deform.save_weights(args.model_path, iteration)
 
-            # Densification
+            # Densification we use 2dgs's stradgy
             if iteration < opt.densify_until_iter:
-                viewspace_point_tensor_densify = render_pkg_re["viewspace_points_densify"]
-                gaussians.add_densification_stats(viewspace_point_tensor_densify, visibility_filter)
+                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-
-                if iteration % opt.opacity_reset_interval == 0 or (
-                        dataset.white_background and iteration == opt.densify_from_iter):
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, opt.opacity_cull, scene.cameras_extent, size_threshold)
+                
+                if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
             # Optimizer step

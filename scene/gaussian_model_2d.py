@@ -214,10 +214,11 @@ class GaussianModel2D:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path):
+    def load_ply(self, path, og_number_points=-1):
+        self.og_number_points = og_number_points
         plydata = PlyData.read(path)
 
-        xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
+        xyz = np.stack((np.asarray(plydata.elements[0]["x"]), 
                         np.asarray(plydata.elements[0]["y"]),
                         np.asarray(plydata.elements[0]["z"])),  axis=1)
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]

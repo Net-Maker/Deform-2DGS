@@ -112,7 +112,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         # regularization
-        lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
+        lambda_normal = opt.lambda_normal if iteration > 9000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
 
         rend_dist = render_pkg_re["rend_dist"]

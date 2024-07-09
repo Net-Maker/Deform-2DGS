@@ -407,7 +407,7 @@ class GUI:
                     self.need_update = True
 
                 dpg.add_combo(
-                    ("render", "depth"),
+                    ("render", "surf_depth"),
                     label="mode",
                     default_value=self.mode,
                     callback=callback_change_mode,
@@ -575,7 +575,7 @@ class GUI:
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - self.opt.lambda_dssim) * Ll1 + self.opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         # regularization
-        lambda_normal = self.opt.lambda_normal if self.iteration > 7000 else 0.0
+        lambda_normal = self.opt.lambda_normal if self.iteration > 9000 else 0.0
         lambda_dist = self.opt.lambda_dist if self.iteration > 3000 else 0.0
 
         rend_dist = render_pkg_re["rend_dist"]
@@ -587,7 +587,7 @@ class GUI:
         
         
         # loss 暂时不要normal，动态和静态的normal不能直接拿来用
-        total_loss = loss + dist_loss 
+        total_loss = loss + dist_loss + normal_loss
         
         total_loss.backward()
 
@@ -691,9 +691,9 @@ class GUI:
 
         buffer_image = out[self.mode]  # [3, H, W]
 
-        if self.mode in ['depth', 'alpha']:
+        if self.mode in ['surf_depth', 'alpha']:
             buffer_image = buffer_image.repeat(3, 1, 1)
-            if self.mode == 'depth':
+            if self.mode == 'surf_depth':
                 buffer_image = (buffer_image - buffer_image.min()) / (buffer_image.max() - buffer_image.min() + 1e-20)
 
         buffer_image = torch.nn.functional.interpolate(

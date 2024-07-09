@@ -20,7 +20,7 @@ from utils.general_utils import safe_state
 from utils.pose_utils import pose_spherical, render_wander_path
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_renderer import GaussianModel
+from scene import GaussianModel
 import imageio
 import numpy as np
 import time
@@ -46,7 +46,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         d_xyz, d_rotation, d_scaling = deform.step(xyz.detach(), time_input)
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
 
         gt = view.original_image[0:3, :, :]
@@ -87,6 +87,7 @@ def interpolate_time(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
     idx = torch.randint(0, len(views), (1,)).item()
     view = views[idx]
     renderings = []
+    depths = []
     for t in tqdm(range(0, frame, 1), desc="Rendering progress"):
         fid = torch.Tensor([t / (frame - 1)]).cuda()
         xyz = gaussians.get_xyz
@@ -95,14 +96,17 @@ def interpolate_time(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
+        depths.append(to8b(depth.cpu().numpy()))
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(t) + ".png"))
         torchvision.utils.save_image(depth, os.path.join(depth_path, '{0:05d}'.format(t) + ".png"))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
+    depths = np.stack(depths, 0).transpose(0, 2, 3, 1)
     imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=30, quality=8)
+    imageio.mimwrite(os.path.join(depth_path, 'depth.mp4'), depths, fps=30, quality=8)
 
 
 def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, timer):
@@ -125,6 +129,7 @@ def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
     #                            0)
 
     renderings = []
+    depths = []
     for i, pose in enumerate(tqdm(render_poses, desc="Rendering progress")):
         fid = view.fid
 
@@ -141,8 +146,9 @@ def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
+        depths.append(to8b(depth.cpu().numpy()))
         # acc = results["acc"]
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(i) + ".png"))
@@ -150,7 +156,9 @@ def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         # torchvision.utils.save_image(acc, os.path.join(acc_path, '{0:05d}'.format(i) + ".png"))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
+    depths = np.stack(depths, 0).transpose(0, 2, 3, 1)
     imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=30, quality=8)
+    imageio.mimwrite(os.path.join(depth_path, 'depth.mp4'), depths, fps=30, quality=8)
 
 
 def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, deform):
@@ -169,6 +177,7 @@ def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, v
     view = views[idx]  # Choose a specific time for rendering
 
     renderings = []
+    depths = []
     for i, pose in enumerate(tqdm(render_poses, desc="Rendering progress")):
         fid = torch.Tensor([i / (frame - 1)]).cuda()
 
@@ -185,14 +194,17 @@ def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, v
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
+        depths.append(to8b(depth.cpu().numpy()))
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(i) + ".png"))
         torchvision.utils.save_image(depth, os.path.join(depth_path, '{0:05d}'.format(i) + ".png"))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
+    depths = np.stack(depths, 0).transpose(0, 2, 3, 1)
     imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=30, quality=8)
+    imageio.mimwrite(os.path.join(depth_path, 'depth.mp4'), depths, fps=30, quality=8)
 
 
 def interpolate_poses(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, timer):
@@ -216,6 +228,7 @@ def interpolate_poses(model_path, load2gpt_on_the_fly, is_6dof, name, iteration,
     t_end = view_end.T
 
     renderings = []
+    depths = []
     for i in tqdm(range(frame), desc="Rendering progress"):
         fid = view.fid
 
@@ -235,9 +248,12 @@ def interpolate_poses(model_path, load2gpt_on_the_fly, is_6dof, name, iteration,
         renderings.append(to8b(rendering.cpu().numpy()))
         depth = results["depth"]
         depth = depth / (depth.max() + 1e-5)
+        depths.append(to8b(depth.cpu().numpy()))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
-    imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=60, quality=8)
+    depths = np.stack(depths, 0).transpose(0, 2, 3, 1)
+    imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=30, quality=8)
+    imageio.mimwrite(os.path.join(depth_path, 'depth.mp4'), depths, fps=30, quality=8)
 
 
 def interpolate_view_original(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background,
@@ -260,6 +276,7 @@ def interpolate_view_original(model_path, load2gpt_on_the_fly, is_6dof, name, it
 
     view = views[0]
     renderings = []
+    depths = []
     for i in tqdm(range(frame), desc="Rendering progress"):
         fid = torch.Tensor([i / (frame - 1)]).cuda()
 
@@ -291,9 +308,12 @@ def interpolate_view_original(model_path, load2gpt_on_the_fly, is_6dof, name, it
         renderings.append(to8b(rendering.cpu().numpy()))
         depth = results["depth"]
         depth = depth / (depth.max() + 1e-5)
+        depths.append(to8b(depth.cpu().numpy()))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
+    depths = np.stack(depths, 0).transpose(0, 2, 3, 1)
     imageio.mimwrite(os.path.join(render_path, 'video.mp4'), renderings, fps=60, quality=8)
+    imageio.mimwrite(os.path.join(depth_path, 'depth.mp4'), depths, fps=60, quality=8)
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool,

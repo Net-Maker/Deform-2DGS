@@ -90,17 +90,17 @@ class OptimizationParams(ParamGroup):
         self.scaling_lr = 0.001
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
-        self.lambda_dssim = 0.2
+        self.lambda_dssim = 0.3
 
-        self.lambda_dist = 1000 # 2dgs config why 0?
-        self.lambda_normal = 0.01
+        self.lambda_dist = 1000 # 2dgs config 
+        self.lambda_normal = 0.02
         self.opacity_cull = 0.05
 
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
-        self.densify_grad_threshold = 0.0002 # 0.0007 in Deform-GS
+        self.densify_grad_threshold = 0.0004 # 0.0007 in Deform-GS 0.0002 in 2d gaussian
         super().__init__(parser, "Optimization Parameters")
 
 

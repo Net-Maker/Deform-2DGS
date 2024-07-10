@@ -15,7 +15,7 @@ from random import randint
 from utils.loss_utils import l1_loss, ssim, kl_divergence
 from gaussian_renderer_2d import render, network_gui
 import sys
-from scene import Scene, GaussianModel, DeformModel
+from scene import Scene, GaussianModel, DeformModel2D
 from utils.general_utils import safe_state, get_linear_noise_func
 import uuid
 from tqdm import tqdm
@@ -36,7 +36,7 @@ torch.backends.cudnn.benchmark = False
 def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
-    deform = DeformModel(dataset.is_blender, dataset.is_6dof)
+    deform = DeformModel2D(dataset.is_blender, dataset.is_6dof)
     deform.train_setting(opt)
 
     scene = Scene(dataset, gaussians)
@@ -55,7 +55,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     best_iteration = 0
     progress_bar = tqdm(range(opt.iterations), desc="Training progress")
     smooth_term = get_linear_noise_func(lr_init=0.1, lr_final=1e-15, lr_delay_mult=0.01, max_steps=20000)
-    # 动态学习率调整策略
+    # 动态学习率调整策略 对应文中的模拟退火策略，结果是抄的Plenoctree?
     for iteration in range(1, opt.iterations + 1):
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -112,8 +112,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         # regularization
-        lambda_normal = opt.lambda_normal if iteration > 9000 else 0.0
-        lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
+        lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
+        lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0 # 要在网络训练一段时间之后再加上dist loss 还是直接加呢？
 
         rend_dist = render_pkg_re["rend_dist"]
         rend_normal  = render_pkg_re['rend_normal']
@@ -171,11 +171,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
-
             # Optimizer step
             if iteration < opt.iterations:
                 gaussians.optimizer.step()
                 gaussians.update_learning_rate(iteration)
+                
+                
                 deform.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none=True)
                 deform.optimizer.zero_grad()

@@ -10,17 +10,17 @@
 #
 
 import torch
-from scene import Scene, DeformModel
+from scene import Scene, DeformModel2D
 import os
 from tqdm import tqdm
 from os import makedirs
-from gaussian_renderer import render
+from gaussian_renderer_2d import render
 import torchvision
 from utils.general_utils import safe_state
 from utils.pose_utils import pose_spherical, render_wander_path
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from scene.gaussian_model import GaussianModel
+from scene import GaussianModel
 import imageio
 import numpy as np
 import time
@@ -46,7 +46,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         d_xyz, d_rotation, d_scaling = deform.step(xyz.detach(), time_input)
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
 
         gt = view.original_image[0:3, :, :]
@@ -96,7 +96,7 @@ def interpolate_time(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
         depths.append(to8b(depth.cpu().numpy()))
 
@@ -146,7 +146,7 @@ def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
         depths.append(to8b(depth.cpu().numpy()))
         # acc = results["acc"]
@@ -194,7 +194,7 @@ def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, v
         results = render(view, gaussians, pipeline, background, d_xyz, d_rotation, d_scaling, is_6dof)
         rendering = results["render"]
         renderings.append(to8b(rendering.cpu().numpy()))
-        depth = results["depth"]
+        depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
         depths.append(to8b(depth.cpu().numpy()))
 
@@ -321,7 +321,7 @@ def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, 
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
-        deform = DeformModel(dataset.is_blender, dataset.is_6dof)
+        deform = DeformModel2D(dataset.is_blender, dataset.is_6dof)
         deform.load_weights(dataset.model_path)
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]

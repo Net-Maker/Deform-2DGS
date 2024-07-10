@@ -3,5 +3,5 @@ LIST=("hellwarrior" "mutant" "hook" "bouncingballs" "lego" "trex" "standup" "jum
 # LIST=("hellwarrior" "mutant" "bouncingballs" "trex" "standup" "jumpingjacks")
 for ELEMENT in "${LIST[@]}";do
   echo "run-${ELEMENT}"
-  python render.py -m output/exp-name-${ELEMENT} --mode render
+  python render_2d.py -m output/exp-name-${ELEMENT} --mode render
   done

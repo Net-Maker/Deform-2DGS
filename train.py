@@ -173,11 +173,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                     gaussians.reset_opacity()
             # Optimizer step
             if iteration < opt.iterations:
+                deform.optimizer.step()
                 gaussians.optimizer.step()
                 gaussians.update_learning_rate(iteration)
                 
                 
-                deform.optimizer.step()
+                
                 gaussians.optimizer.zero_grad(set_to_none=True)
                 deform.optimizer.zero_grad()
                 deform.update_learning_rate(iteration)

@@ -8,6 +8,7 @@ import tinycudann as tcnn
 class NGP_Encoder(nn.Module):
     def __init__(self, input_dim, config = None, dtype = torch.float32):
         # 注意： float32才能保证梯度正常传导，如果要使用NGP的加速则可以改成float16，但是有梯度消失的风险
+        super(NGP_Encoder, self).__init__()
         if config is not None:
             print("create NGP network from config file")
             encoding_config = config
@@ -26,7 +27,7 @@ class NGP_Encoder(nn.Module):
         return self.fn(input)
 
 
-def get_embedder(multires, i=1):
+def get_embedder(multires, use_ngp=False, i=1):
     if i == -1:
         return nn.Identity(), 3
 
@@ -36,18 +37,18 @@ def get_embedder(multires, i=1):
         'max_freq_log2': multires - 1,
         'num_freqs': multires,
         'log_sampling': True,
-        'periodic_fns': [torch.sin, torch.cos],
+        'periodic_fns': [torch.sin, torch.cos]
     }
 
-    embedder_obj = Embedder(**embed_kwargs)
+    embedder_obj = Embedder(use_ngp=use_ngp, **embed_kwargs)
     embed = lambda x, eo=embedder_obj: eo.embed(x)
     return embed, embedder_obj.out_dim
 
 
 class Embedder:
-    def __init__(self, **kwargs):
+    def __init__(self, use_ngp=False, **kwargs):
         self.kwargs = kwargs
-        self.create_embedding_fn()
+        self.create_embedding_fn(use_ngp)
 
     def create_embedding_fn(self,use_ngp = False):
         embed_fns = []
@@ -92,8 +93,9 @@ class DeformNetwork2D(nn.Module):
         self.t_multires = 6 if is_blender else 10
         self.skips = [D // 2]
 
-        self.embed_time_fn, time_input_ch = get_embedder(self.t_multires, 1)
-        self.embed_fn, xyz_input_ch = get_embedder(multires, 3)
+        self.embed_time_fn, time_input_ch = get_embedder(self.t_multires,use_ngp=False, i=1)
+        self.embed_fn, xyz_input_ch = get_embedder(multires,use_ngp=True, i=3)
+        # self.hash_embed = 
         self.input_ch = xyz_input_ch + time_input_ch
 
         if is_blender:
@@ -133,6 +135,7 @@ class DeformNetwork2D(nn.Module):
         if self.is_blender:
             t_emb = self.timenet(t_emb)  # better for D-NeRF Dataset
         x_emb = self.embed_fn(x)
+
         h = torch.cat([x_emb, t_emb], dim=-1)
         for i, l in enumerate(self.linear):
             h = self.linear[i](h)

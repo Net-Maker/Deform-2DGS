@@ -2,6 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.rigid_utils import exp_se3
+import tinycudann as tcnn
+
+
+class NGP_Encoder(nn.Module):
+    def __init__(self, input_dim, config = None, dtype = torch.float32):
+        # 注意： float32才能保证梯度正常传导，如果要使用NGP的加速则可以改成float16，但是有梯度消失的风险
+        if config is not None:
+            print("create NGP network from config file")
+            encoding_config = config
+        else:
+            print("use default config to create NGP encoding")
+            encoding_config = {
+                "n_levels": 8,
+                "otype": "HashGrid",
+                "n_features_per_level": 2,
+                "base_resolution": 16,
+                "log2_hashmap_size": 16,
+            }
+        self.fn = tcnn.Encoding(input_dim, encoding_config, dtype = dtype)
+        self.output_dim = encoding_config['n_levels'] * encoding_config['n_features_per_level']
+    def forward(self, input):
+        return self.fn(input)
 
 
 def get_embedder(multires, i=1):
@@ -27,7 +49,7 @@ class Embedder:
         self.kwargs = kwargs
         self.create_embedding_fn()
 
-    def create_embedding_fn(self):
+    def create_embedding_fn(self,use_ngp = False):
         embed_fns = []
         d = self.kwargs['input_dims']
         out_dim = 0
@@ -47,6 +69,11 @@ class Embedder:
             for p_fn in self.kwargs['periodic_fns']:
                 embed_fns.append(lambda x, p_fn=p_fn, freq=freq: p_fn(x * freq))
                 out_dim += d
+        
+        if use_ngp:
+            ngp_encoding = NGP_Encoder(input_dim = d)
+            embed_fns.append(lambda x, ne=ngp_encoding: ne(x))
+            out_dim += ngp_encoding.output_dim
 
         self.embed_fns = embed_fns
         self.out_dim = out_dim

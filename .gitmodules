@@ -8,3 +8,6 @@
 [submodule "submodules/diff-surfel-rasterization"]
 	path = submodules/diff-surfel-rasterization
 	url = https://github.com/hbb1/diff-surfel-rasterization.git
+[submodule "submodules/tiny-cuda-nn"]
+	path = submodules/tiny-cuda-nn
+	url = https://github.com/NVlabs/tiny-cuda-nn

@@ -1,4 +1,4 @@
-submodules/depth-diff-gaussian-rasterization
+submodules/depth-surfel-rasterization
 submodules/simple-knn
 plyfile==0.8.1
 tqdm

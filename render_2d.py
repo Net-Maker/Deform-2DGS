@@ -24,16 +24,21 @@ from scene import GaussianModel
 import imageio
 import numpy as np
 import time
-
+import open3d as o3d
+import pytorch3d as tf
+from pytorch3d.io import save_obj
+from pytorch3d.structures import Pointclouds
 
 def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, deform):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
     depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depth")
+    points_path = os.path.join(model_path, name, "ours_{}".format(iteration), "point_cloud")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
+    makedirs(points_path, exist_ok=True)
 
     t_list = []
 
@@ -48,6 +53,11 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         rendering = results["render"]
         depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
+        points = xyz + d_xyz
+        points = points.cpu().numpy()
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        o3d.io.write_point_cloud(os.path.join(points_path, '{0:05d}'.format(idx) + ".ply"), pcd)
 
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
@@ -77,17 +87,24 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
 def interpolate_time(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, deform):
     render_path = os.path.join(model_path, name, "interpolate_{}".format(iteration), "renders")
     depth_path = os.path.join(model_path, name, "interpolate_{}".format(iteration), "depth")
+    points_path = os.path.join(model_path, name, "interpolate_{}".format(iteration), "point_cloud")
 
     makedirs(render_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
+    makedirs(points_path, exist_ok=True)
+
+
 
     to8b = lambda x: (255 * np.clip(x, 0, 1)).astype(np.uint8)
 
     frame = 150
     idx = torch.randint(0, len(views), (1,)).item()
+    idx = 44
+    print("view idx:",idx)
     view = views[idx]
     renderings = []
     depths = []
+    tmp = 0
     for t in tqdm(range(0, frame, 1), desc="Rendering progress"):
         fid = torch.Tensor([t / (frame - 1)]).cuda()
         xyz = gaussians.get_xyz
@@ -99,6 +116,14 @@ def interpolate_time(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
         depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
         depths.append(to8b(depth.cpu().numpy()))
+
+        # points = xyz + d_xyz
+        # points = points.cpu().numpy()
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(points)
+        # o3d.io.write_point_cloud(os.path.join(points_path, '{0:05d}'.format(tmp) + ".ply"), pcd)
+        # tmp += 1
+
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(t) + ".png"))
         torchvision.utils.save_image(depth, os.path.join(depth_path, '{0:05d}'.format(t) + ".png"))

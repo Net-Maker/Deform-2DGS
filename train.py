@@ -36,7 +36,7 @@ torch.backends.cudnn.benchmark = False
 def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
-    deform = DeformModel2D(dataset.is_blender, dataset.is_6dof)
+    deform = DeformModel2D(dataset.is_blender, dataset.is_6dof) # DeformModel2D是使用了空间编码的一个MLP，而DeformModel则是一个纯MLP，后续可以使用DeformModel2D，也可以算是一个创新点
     deform.train_setting(opt)
 
     scene = Scene(dataset, gaussians)
@@ -101,7 +101,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             ast_noise = 0 if dataset.is_blender else torch.randn(1, 1, device='cuda').expand(N, -1) * time_interval * smooth_term(iteration)
             d_xyz, d_rotation, d_scaling = deform.step(gaussians.get_xyz.detach(), time_input + ast_noise)
 
-        # Render
+        # Render 这里我改成了2DGS的渲染器，出来和原Deform-GS不一样，Surf-Noraml是通过depth计算的，rend_normal是直接从2DGS渲染出来的,质量上来说，都是surf更好，这里是想用这两个作一个normal loss，就是2DGS论文里面的normal loss
         render_pkg_re = render(viewpoint_cam, gaussians, pipe, background, d_xyz, d_rotation, d_scaling, dataset.is_6dof)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg_re["render"], render_pkg_re[
             "viewspace_points"], render_pkg_re["visibility_filter"], render_pkg_re["radii"]
@@ -113,7 +113,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         # regularization
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
-        lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0 # 要在网络训练一段时间之后再加上dist loss 还是直接加呢？
+        lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0 # 
 
         rend_dist = render_pkg_re["rend_dist"]
         rend_normal  = render_pkg_re['rend_normal']

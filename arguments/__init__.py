@@ -92,7 +92,7 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
         self.lambda_dssim = 0.3
 
-        self.lambda_dist = 1000 # 2dgs config 
+        self.lambda_dist = 1 # 2dgs config 
         self.lambda_normal = 0.02
         self.opacity_cull = 0.05
 

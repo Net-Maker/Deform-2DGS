@@ -33,6 +33,39 @@ except ImportError:
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = False
 
+
+
+
+
+def compute_scale_consistency_loss(xyz, scales, knn_idx, knn_weights):
+    """计算scale一致性loss
+    Args:
+        xyz: 点云坐标 (N, 3)
+        scales: 点云scale (N, 3)
+        knn_idx: KNN索引 (N, K)
+        knn_weights: KNN权重 (N, K)
+    Returns:
+        scale_consistency_loss: scale一致性loss
+    """
+    # 获取每个点的邻居的scales
+    neighbor_scales = scales[knn_idx]  # (N, K, 3)
+    
+    # 计算加权平均
+    weights = knn_weights.unsqueeze(-1)  # (N, K, 1)
+    weighted_mean = (neighbor_scales * weights).sum(dim=1) / weights.sum(dim=1)  # (N, 3)
+    
+    # 计算加权标准差
+    squared_diff = (neighbor_scales - weighted_mean.unsqueeze(1)) ** 2  # (N, K, 3)
+    weighted_var = (squared_diff * weights).sum(dim=1) / weights.sum(dim=1)  # (N, 3)
+    weighted_std = torch.sqrt(weighted_var + 1e-8)  # 添加小值避免数值不稳定
+    
+    # 计算所有组的平均标准差
+    scale_consistency_loss = weighted_std.mean()
+    
+    return scale_consistency_loss
+
+
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -50,6 +83,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     iter_end = torch.cuda.Event(enable_timing=True)
 
     viewpoint_stack = None
+    knn_idx = None
+    knn_weights = None
     ema_loss_for_log = 0.0
     best_psnr = 0.0
     best_iteration = 0
@@ -122,9 +157,25 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
         
-        
         # loss
         total_loss = loss + dist_loss + normal_loss
+
+        # 在densify_until_iter之后添加scale consistency loss
+
+        if iteration == opt.densify_until_iter:
+            from pytorch3d.ops import knn_points
+                
+            # 确保使用contiguous的张量来构建KNN
+            xyz = gaussians.get_xyz.detach().contiguous()
+            knn_result = knn_points(xyz.unsqueeze(0), xyz.unsqueeze(0), K=20+1)
+            knn_idx = knn_result.idx.squeeze(0)[:, 1:].contiguous()  # [N, K]
+            knn_dists = knn_result.dists.squeeze(0)[:, 1:].sqrt().contiguous()  # [N, K]
+            knn_weights = torch.exp(-2000 * knn_dists**2).contiguous()
+
+        if iteration > opt.densify_until_iter:
+            lambda_scale = 0.01  # 可以根据需要调整权重
+            scale_consistency_loss = compute_scale_consistency_loss(gaussians.get_xyz, gaussians.get_scaling, knn_idx, knn_weights)
+            total_loss = total_loss + lambda_scale * scale_consistency_loss
         
         total_loss.backward()
 

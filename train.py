@@ -22,8 +22,6 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from utils.dpsr_renderer import *
-import nvdiffrast.torch as dr
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -73,7 +71,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     gaussians = GaussianModel(dataset.sh_degree)
     deform = DeformModel2D(dataset.is_blender, dataset.is_6dof) # DeformModel2D是使用了空间编码的一个MLP，而DeformModel则是一个纯MLP，后续可以使用DeformModel2D，也可以算是一个创新点
     deform.train_setting(opt)
-    glctx = dr.RasterizeGLContext()
 
     scene = Scene(dataset, gaussians)
     # Scene这个类主要是给出相机参数

@@ -41,6 +41,7 @@ class CameraInfo(NamedTuple):
     height: int
     fid: float
     depth: Optional[np.array] = None
+    alpha_mask: Optional[np.array] = None
 
 
 class SceneInfo(NamedTuple):
@@ -261,7 +262,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                                         image_path=image_path, image_name=image_name, width=image.size[
                                             0],
-                                        height=image.size[1], fid=frame_time))
+                                        height=image.size[1], fid=frame_time, alpha_mask=mask))
 
     return cam_infos
 
@@ -357,7 +358,7 @@ def readDTUCameras(path, render_camera, object_camera):
         cam_info = CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=image.size[
                                   0], height=image.size[1],
-                              fid=fid)
+                              fid=fid, alpha_mask=mask)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos

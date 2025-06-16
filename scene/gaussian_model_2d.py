@@ -124,6 +124,12 @@ class GaussianModel2D:
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
 
+    def get_normal(self):
+        """
+        only for 2DGS, return the point wise normal vector, which means the normal from the disk
+        """
+        pass
+
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()

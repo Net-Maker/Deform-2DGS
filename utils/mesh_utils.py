@@ -334,7 +334,7 @@ class GaussianExtractor(object):
         self.depthmaps = torch.stack(self.depthmaps, dim=0)
 
     @torch.no_grad()
-    def extract_mesh_bounded(self, voxel_size=0.03, sdf_trunc=0.1, depth_trunc=12, mask_backgrond=True):
+    def extract_mesh_bounded(self, voxel_size=0.01, sdf_trunc=0.03, depth_trunc=12, mask_backgrond=True):
         """
         Perform TSDF fusion given a fixed depth range, used in the paper.
         

@@ -22,6 +22,8 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from utils.dpsr_renderer import *
+import nvdiffrast.torch as dr
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -71,6 +73,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     gaussians = GaussianModel(dataset.sh_degree)
     deform = DeformModel2D(dataset.is_blender, dataset.is_6dof) # DeformModel2D是使用了空间编码的一个MLP，而DeformModel则是一个纯MLP，后续可以使用DeformModel2D，也可以算是一个创新点
     deform.train_setting(opt)
+    glctx = dr.RasterizeGLContext()
 
     scene = Scene(dataset, gaussians)
     # Scene这个类主要是给出相机参数
@@ -156,6 +159,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
         normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
+
+        # mask_loss
+        gt_mask = viewpoint_cam.gt_alpha_mask.cuda()
         
         # loss
         total_loss = loss + dist_loss + normal_loss
@@ -173,9 +179,51 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             knn_weights = torch.exp(-2000 * knn_dists**2).contiguous()
 
         if iteration > opt.densify_until_iter:
-            lambda_scale = 0.01  # 可以根据需要调整权重
+            lambda_scale = 0.1  # 可以根据需要调整权重
             scale_consistency_loss = compute_scale_consistency_loss(gaussians.get_xyz, gaussians.get_scaling, knn_idx, knn_weights)
             total_loss = total_loss + lambda_scale * scale_consistency_loss
+
+
+
+        if iteration > 37000:
+            lambda_dpsr = 0.01
+            # DPSR
+            freeze_pos = iteration < DPSR_ITER + opt.normal_warm_up
+            mask, mesh_image, verts, faces, _ = mesh_renderer(
+                glctx,
+                gaussians,
+                d_xyz,
+                gaussians.get_normal,
+                fid,
+                deform_back=None,
+                appearance=None,
+                freeze_pos=False,
+                white_background=dataset.white_background,
+                viewpoint=viewpoint_cam,
+            )
+
+            ### Mask loss
+            gt_mask = viewpoint_cam.gt_alpha_mask.cuda()
+            mask_loss = l1_loss(mask, gt_mask)
+            losses["mask_loss"] = mask_loss * 100 * opt.mask_loss_weight
+            ### mesh image loss
+            gt_image = viewpoint_cam.original_image.cuda()
+            Ll1 = l1_loss(mesh_image, gt_image)
+            mesh_img_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (
+                1.0 - ssim(mesh_image, gt_image)
+            )
+            mesh_img_loss = mesh_img_loss * opt.mesh_img_loss_weight
+            losses["mesh_img_loss"] = mesh_img_loss
+            psnr["mesh_img_psnr"] = get_psnr(mesh_image.detach(), gt_image.detach())
+            ## Laplacian loss
+            laplacian_scale = 1000 * lp.laplacian_loss_weight
+            t_iter = iteration / opt.iterations
+            laplacian_loss = (
+                regularizer.laplace_regularizer_const(verts, faces.long())
+                * laplacian_scale
+                * (1 - t_iter)
+            )
+            losses["laplacian_loss"] = laplacian_loss
         
         total_loss.backward()
 

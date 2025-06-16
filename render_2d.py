@@ -34,12 +34,13 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
     depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depth")
     points_path = os.path.join(model_path, name, "ours_{}".format(iteration), "point_cloud")
+    mask_path = os.path.join(model_path, name, "ours_{}".format(iteration), "mask")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
     makedirs(points_path, exist_ok=True)
-
+    makedirs(mask_path, exist_ok=True)
     t_list = []
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
@@ -60,10 +61,17 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         o3d.io.write_point_cloud(os.path.join(points_path, '{0:05d}'.format(idx) + ".ply"), pcd)
 
         gt = view.original_image[0:3, :, :]
+        mask = view.gt_alpha_mask
+        if mask.ndim == 3 and mask.shape[2] == 1:
+            mask_tensor = mask.permute(2, 0, 1)
+        elif mask.ndim == 2:  
+            mask_tensor = mask.unsqueeze(0)
+        else:
+            mask_tensor = mask
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(depth, os.path.join(depth_path, '{0:05d}'.format(idx) + ".png"))
-
+        torchvision.utils.save_image(mask_tensor, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         fid = view.fid
         xyz = gaussians.get_xyz
@@ -189,10 +197,11 @@ def interpolate_view(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, 
 def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, views, gaussians, pipeline, background, deform):
     render_path = os.path.join(model_path, name, "interpolate_all_{}".format(iteration), "renders")
     depth_path = os.path.join(model_path, name, "interpolate_all_{}".format(iteration), "depth")
+    mask_path = os.path.join(model_path, name, "interpolate_all_{}".format(iteration), "mask")
 
     makedirs(render_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
-
+    makedirs(mask_path, exist_ok=True)
     frame = 150
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, frame + 1)[:-1]],
                                0)
@@ -203,6 +212,7 @@ def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, v
 
     renderings = []
     depths = []
+    masks = []
     for i, pose in enumerate(tqdm(render_poses, desc="Rendering progress")):
         fid = torch.Tensor([i / (frame - 1)]).cuda()
 
@@ -222,9 +232,18 @@ def interpolate_all(model_path, load2gpt_on_the_fly, is_6dof, name, iteration, v
         depth = results["surf_depth"]
         depth = depth / (depth.max() + 1e-5)
         depths.append(to8b(depth.cpu().numpy()))
+        mask = view.gt_alpha_mask
+        masks.append(mask.cpu().numpy())
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(i) + ".png"))
         torchvision.utils.save_image(depth, os.path.join(depth_path, '{0:05d}'.format(i) + ".png"))
+        if mask.ndim == 3 and mask.shape[2] == 1:
+            mask_tensor = mask.permute(2, 0, 1)
+        elif mask.ndim == 2:  
+            mask_tensor = mask.unsqueeze(0)
+        else:
+            mask_tensor = mask
+        torchvision.utils.save_image(mask_tensor, os.path.join(mask_path, '{0:05d}'.format(i) + ".png"))
 
     renderings = np.stack(renderings, 0).transpose(0, 2, 3, 1)
     depths = np.stack(depths, 0).transpose(0, 2, 3, 1)

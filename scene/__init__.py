@@ -25,9 +25,9 @@ class Scene:
     gaussians: GaussianModel
 
     def __init__(self, args: ModelParams, gaussians: GaussianModel, load_iteration=None, shuffle=True,
-                 resolution_scales=[1.0]):
-        """b
-        :param path: Path to colmap scene main folder.
+                 resolution_scales=[1.0], data_percentage=1.0):
+        """
+        :param data_percentage: 使用训练数据的百分比 (0.1 = 10%, 1.0 = 100%)
         """
         self.model_path = args.model_path
         self.loaded_iter = None
@@ -78,15 +78,26 @@ class Scene:
             with open(os.path.join(self.model_path, "cameras.json"), 'w') as file:
                 json.dump(json_cams, file)
 
+        train_cameras = list(scene_info.train_cameras)
+        
+        # 数据分割逻辑
+        if data_percentage < 1.0:
+            num_train_cameras = len(scene_info.train_cameras)
+            num_to_use = int(num_train_cameras * data_percentage)
+            train_cameras = train_cameras[:num_to_use]
+            print(f"使用 {num_to_use}/{num_train_cameras} 个训练相机 ({data_percentage*100:.1f}%)")
+        
         if shuffle:
-            random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
-            random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
+            random.shuffle(train_cameras)
+            random.shuffle(scene_info.test_cameras)
+
+        
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
 
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale,
+            self.train_cameras[resolution_scale] = cameraList_from_camInfos(train_cameras, resolution_scale,
                                                                             args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale,
@@ -113,3 +124,4 @@ class Scene:
 
     def getAllCameras(self, scale=1.0):
         return self.train_cameras[scale] + self.test_cameras[scale]
+

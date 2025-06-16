@@ -8,4 +8,4 @@ tensorboard_3d
 screenshots
 .idea
 *.out
-submodules
+submodules/*

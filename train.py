@@ -182,48 +182,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             lambda_scale = 0.1  # 可以根据需要调整权重
             scale_consistency_loss = compute_scale_consistency_loss(gaussians.get_xyz, gaussians.get_scaling, knn_idx, knn_weights)
             total_loss = total_loss + lambda_scale * scale_consistency_loss
-
-
-
-        if iteration > 37000:
-            lambda_dpsr = 0.01
-            # DPSR
-            freeze_pos = iteration < DPSR_ITER + opt.normal_warm_up
-            mask, mesh_image, verts, faces, _ = mesh_renderer(
-                glctx,
-                gaussians,
-                d_xyz,
-                gaussians.get_normal,
-                fid,
-                deform_back=None,
-                appearance=None,
-                freeze_pos=False,
-                white_background=dataset.white_background,
-                viewpoint=viewpoint_cam,
-            )
-
-            ### Mask loss
-            gt_mask = viewpoint_cam.gt_alpha_mask.cuda()
-            mask_loss = l1_loss(mask, gt_mask)
-            losses["mask_loss"] = mask_loss * 100 * opt.mask_loss_weight
-            ### mesh image loss
-            gt_image = viewpoint_cam.original_image.cuda()
-            Ll1 = l1_loss(mesh_image, gt_image)
-            mesh_img_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (
-                1.0 - ssim(mesh_image, gt_image)
-            )
-            mesh_img_loss = mesh_img_loss * opt.mesh_img_loss_weight
-            losses["mesh_img_loss"] = mesh_img_loss
-            psnr["mesh_img_psnr"] = get_psnr(mesh_image.detach(), gt_image.detach())
-            ## Laplacian loss
-            laplacian_scale = 1000 * lp.laplacian_loss_weight
-            t_iter = iteration / opt.iterations
-            laplacian_loss = (
-                regularizer.laplace_regularizer_const(verts, faces.long())
-                * laplacian_scale
-                * (1 - t_iter)
-            )
-            losses["laplacian_loss"] = laplacian_loss
         
         total_loss.backward()
 

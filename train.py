@@ -33,6 +33,34 @@ except ImportError:
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = False
 
+def get_point_sequence(viewpoint_cam_stack, gaussians, deform):
+    gaussian_point_cloud = []
+
+    for idx, viewpoint_cam in tqdm(enumerate(viewpoint_cam_stack)):
+
+        fid = viewpoint_cam.fid
+        # frame_id = int(fid * 200 + 0.5)
+        # print(int(fid * 200 + 0.5))
+        N = gaussians.get_xyz.shape[0]
+        time_input = fid.unsqueeze(0).expand(N, -1)
+
+        # Query the gaussians
+        
+        d_xyz, d_rotation, d_scaling = deform.step(
+            gaussians.get_xyz.detach(), time_input
+        )
+        gaussian_point_cloud.append(np.array(gaussians.get_xyz.detach().cpu() + d_xyz.detach().cpu()))
+
+    return np.array(gaussian_point_cloud)
+
+def get_t_gs(viewpoint_cam_stack, gaussians, deform, t):
+    fid = viewpoint_cam_stack[t].fid
+    N = gaussians.get_xyz.shape[0]
+    time_input = fid.unsqueeze(0).expand(N, -1)
+    d_xyz, d_rotation, d_scaling = deform.step(
+        gaussians.get_xyz.detach(), time_input
+    )
+    return np.array(gaussians.get_xyz.detach().cpu() + d_xyz.detach().cpu())
 
 
 

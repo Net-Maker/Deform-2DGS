@@ -126,3 +126,38 @@ def get_combined_args(parser: ArgumentParser):
         if v != None:
             merged_dict[k] = v
     return Namespace(**merged_dict)
+
+
+def get_combined_args_with_model_path(parser: ArgumentParser, model_path: str, cmdline_args: list = None):
+    """
+    Similar to get_combined_args but allows specifying model_path directly
+    and optional command line arguments
+    """
+    if cmdline_args is None:
+        cmdline_args = []
+    
+    # Parse command line arguments
+    args_cmdline = parser.parse_args(cmdline_args)
+    
+    # Override model_path
+    args_cmdline.model_path = model_path
+    
+    cfgfile_string = "Namespace()"
+    
+    try:
+        cfgfilepath = os.path.join(model_path, "cfg_args")
+        print("Looking for config file in", cfgfilepath)
+        with open(cfgfilepath) as cfg_file:
+            print("Config file found: {}".format(cfgfilepath))
+            cfgfile_string = cfg_file.read()
+    except (TypeError, FileNotFoundError):
+        print("Config file not found at", cfgfilepath if 'cfgfilepath' in locals() else model_path)
+        pass
+    
+    args_cfgfile = eval(cfgfile_string)
+
+    merged_dict = vars(args_cfgfile).copy()
+    for k, v in vars(args_cmdline).items():
+        if v != None:
+            merged_dict[k] = v
+    return Namespace(**merged_dict)

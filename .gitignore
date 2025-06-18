@@ -9,3 +9,5 @@ screenshots
 .idea
 *.out
 submodules/*
+*.sh
+tempexp/
